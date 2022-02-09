@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://xamarin.com/schemas/2014/forms"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="StravaExample.MainPage">
+
+    <StackLayout>
+        <Button x:Name="connectButton"
+                Text="CONNECT"
+                Clicked="Connect_Clicked"
+                HorizontalOptions="Center"/>
+        <Button x:Name="disconnectButton"
+                Text="DISCONNECT"
+                Clicked="Disconnect_Clicked"
+                HorizontalOptions="Center"/>
+    </StackLayout>
+
+</ContentPage>
