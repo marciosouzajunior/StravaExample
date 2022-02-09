@@ -38,6 +38,11 @@ namespace StravaExample
             CheckConnected();
         }
 
+        private void Sync_Clicked(object sender, EventArgs e)
+        {
+            StravaService.Sync();
+        }
+
         private void CheckConnected()
         {
             if (StravaService.IsConnected())

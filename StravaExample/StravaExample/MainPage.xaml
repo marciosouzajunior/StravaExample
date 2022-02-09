@@ -5,13 +5,17 @@
 
     <StackLayout>
         <Button x:Name="connectButton"
-                Text="CONNECT"
+                Text="Connect"
                 Clicked="Connect_Clicked"
                 HorizontalOptions="Center"/>
         <Button x:Name="disconnectButton"
-                Text="DISCONNECT"
+                Text="Disconnect"
                 Clicked="Disconnect_Clicked"
                 HorizontalOptions="Center"/>
+        <Button x:Name="syncButton"
+                Text="Sync"
+                Clicked="Sync_Clicked"
+                HorizontalOptions="Center"/>        
     </StackLayout>
 
 </ContentPage>
