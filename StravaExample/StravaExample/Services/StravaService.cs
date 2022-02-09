@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
-using StravaExample;
 using StravaExample.Models;
+using StravaExample.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,7 +12,7 @@ using Xamarin.Essentials;
 using Xamarin.Forms;
 
 [assembly: Dependency(typeof(StravaService))]
-namespace StravaExample
+namespace StravaExample.Services
 {
     public class StravaService
     {
