@@ -1,11 +1,13 @@
-﻿using System;
+﻿using StravaExample.Services.Impl;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Xamarin.Forms;
 
-namespace StravaExample.Services
+[assembly: Dependency(typeof(Properties))]
+namespace StravaExample.Services.Impl
 {
-    public class PropertiesService
+    public class Properties : IProperties
     {
         public void Save(string key, object value)
         {

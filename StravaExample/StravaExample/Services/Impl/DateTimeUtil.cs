@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace StravaExample.Services
+namespace StravaExample.Services.Impl
 {
     public class DateTimeUtil
     {

@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 using StravaExample.Models;
-using StravaExample.Services;
+using StravaExample.Services.Impl;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,12 +12,14 @@ using Xamarin.Essentials;
 using Xamarin.Forms;
 
 [assembly: Dependency(typeof(StravaService))]
-namespace StravaExample.Services
+namespace StravaExample.Services.Impl
 {
-    public class StravaService
+    public class StravaService : IStravaService
     {
-        private PropertiesService propertiesService;
-        private HttpClient httpClient;
+        private IDialog dialog;
+        private IProperties properties;
+        private IDatabase database;
+        private IHttpHandler httpHandler;
 
         private string clientId = "ReplaceWithClientID";
         private string clientSecret = "ReplaceWithClientSecret";
@@ -26,11 +28,20 @@ namespace StravaExample.Services
 
         public StravaService()
         {
-            propertiesService = new PropertiesService();
-            httpClient = new HttpClient()
-            {
-                BaseAddress = new Uri("https://www.strava.com")
-            };
+            dialog = DependencyService.Get<IDialog>();
+            properties = DependencyService.Get<IProperties>();
+            database = DependencyService.Get<IDatabase>();
+            httpHandler = DependencyService.Get<IHttpHandler>();
+            httpHandler.BaseAddress = new Uri("https://www.strava.com");
+        }
+
+        public StravaService(IDialog dialog, IProperties properties, IDatabase database, IHttpHandler httpHandler)
+        {
+            this.dialog = dialog;
+            this.properties = properties;
+            this.database = database;
+            this.httpHandler = httpHandler;
+            httpHandler.BaseAddress = new Uri("https://www.strava.com");
         }
 
         public async Task Connect()
@@ -71,18 +82,18 @@ namespace StravaExample.Services
                     JsonConvert.SerializeObject(tokenRequest),
                     Encoding.UTF8,
                     "application/json");
-                HttpResponseMessage httpResponseMessage = await httpClient.PostAsync("/api/v3/oauth/token", content);
+                HttpResponseMessage httpResponseMessage = await httpHandler.PostAsync("/api/v3/oauth/token", content);
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
                     string tokenResponse = await httpResponseMessage.Content.ReadAsStringAsync();
                     StravaTokenResponse stravaTokenResponse = JsonConvert.DeserializeObject<StravaTokenResponse>(tokenResponse);
-                    propertiesService.Save("stravaToken", JsonConvert.SerializeObject(stravaTokenResponse));
-                    Console.WriteLine("Connected to Strava.");
+                    properties.Save("stravaToken", JsonConvert.SerializeObject(stravaTokenResponse));
+                    await dialog.DisplayAlert("Connect", "Connected to Strava.", "OK");
                 }
                 else
                 {
-                    Console.WriteLine("Fail to connect.");
+                    await dialog.DisplayAlert("Connect", "Fail to connect.", "OK");
                 }
 
             }
@@ -111,18 +122,22 @@ namespace StravaExample.Services
             {
                 string accessToken = await GetAccessToken();
                 HttpResponseMessage httpResponseMessage =
-                    await httpClient.PostAsync("/api/v3/oauth/deauthorize?access_token=" + accessToken, null);
+                    await httpHandler.PostAsync("/api/v3/oauth/deauthorize?access_token=" + accessToken, null);
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("Disconnected from Strava.");
+                    await dialog.DisplayAlert("Disconnect", "Disconnected from Strava.", "OK");
                 }
-                propertiesService.Remove("stravaToken");
-                propertiesService.Remove("stravaSyncDate");
+                else
+                {
+                    await dialog.DisplayAlert("Disconnect", "Fail to disconnect from Strava.", "OK");
+                }
+                properties.Remove("stravaToken");
+                properties.Remove("stravaSyncDate");
             }
             catch (Exception e)
             {
-                Console.WriteLine("Fail to disconnect: " + e.Message);
+                Console.WriteLine("Fail to disconnect from Strava: " + e.Message);
             }
         }
 
@@ -130,7 +145,7 @@ namespace StravaExample.Services
         {
             try
             {
-                return propertiesService.Contains("stravaToken");
+                return properties.Contains("stravaToken");
             }
             catch (Exception e)
             {
@@ -143,14 +158,14 @@ namespace StravaExample.Services
         {
             try
             {
-                bool containsStravaToken = propertiesService.Contains("stravaToken");
+                bool containsStravaToken = properties.Contains("stravaToken");
                 if (!containsStravaToken)
                 {
                     return null;
                 }
 
                 // Get saved token
-                string stravaTokenStr = (string)propertiesService.Get("stravaToken");
+                string stravaTokenStr = (string)properties.Get("stravaToken");
                 StravaTokenResponse stravaToken = JsonConvert.DeserializeObject<StravaTokenResponse>(stravaTokenStr);
 
                 // Token is still valid
@@ -172,13 +187,13 @@ namespace StravaExample.Services
                     JsonConvert.SerializeObject(refreshTokenRequest),
                     Encoding.UTF8,
                     "application/json");
-                HttpResponseMessage httpResponseMessage = await httpClient.PostAsync("/api/v3/oauth/token", content);
+                HttpResponseMessage httpResponseMessage = await httpHandler.PostAsync("/api/v3/oauth/token", content);
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
                     string tokenResult = await httpResponseMessage.Content.ReadAsStringAsync();
                     stravaToken = JsonConvert.DeserializeObject<StravaTokenResponse>(tokenResult);
-                    propertiesService.Save("stravaToken", JsonConvert.SerializeObject(stravaToken));
+                    properties.Save("stravaToken", JsonConvert.SerializeObject(stravaToken));
                     return stravaToken.access_token;
                 }
                 else
@@ -188,12 +203,12 @@ namespace StravaExample.Services
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error getting token: " + e.Message);
+                Console.WriteLine("Error getting access token: " + e.Message);
                 return null;
             }
         }
 
-        public void NewActivity(AppActivity appActivity)
+        public async Task NewActivity(AppActivity appActivity)
         {
 
             if (!IsConnected())
@@ -207,11 +222,12 @@ namespace StravaExample.Services
                 {
                     AppActivityId = appActivity.Id
                 };
-                // Save stravaSync to database
+                await database.Insert(stravaSync);
+                await dialog.DisplayAlert("NewActivity", "Activity inserted and ready to sync.", "OK");
             }
             catch (Exception e)
             {
-                Console.WriteLine("Error adding activity: " + e.Message);
+                await dialog.DisplayAlert("NewActivity", "Error adding activity: " + e.Message, "OK");
             }
         }
 
@@ -223,19 +239,13 @@ namespace StravaExample.Services
 
             try
             {
-
-                // Initialize this list with activities to be synced. Example:
-                // List<StravaSync> stravaSyncList = await database.GetAll<StravaSync>();
-                List<StravaSync> stravaSyncList = new List<StravaSync>();
-
+                List<StravaSync> stravaSyncList = await database.GetAll<StravaSync>();
                 foreach (StravaSync stravaSync in stravaSyncList)
                 {
 
-                    // Get appActivity and appActivityHRList from database. Example:
-                    // AppActivity appActivity = await database.Get<AppActivity>(stravaSync.AppActivityId);
-                    // List<AppActivityHR> appActivityHRList = await database.Query<AppActivityHR>("SELECT * FROM AppActivityHR WHERE AppActivityId = ? ORDER BY SecondsMeasure;", appActivity.Id);
-                    AppActivity appActivity = new AppActivity();
-                    List<AppActivityHR> appActivityHRList = new List<AppActivityHR>();
+                    AppActivity appActivity = await database.Get<AppActivity>(stravaSync.AppActivityId);
+                    List<AppActivityHR> appActivityHRList = await database.Query<AppActivityHR>(
+                        "SELECT * FROM AppActivityHR WHERE AppActivityId = ? ORDER BY SecondsMeasure;", appActivity.Id);
 
                     // Create form data with gpx file
                     string gpxString = ConvertAppActivityToStravaGPX(appActivity, appActivityHRList);
@@ -251,12 +261,11 @@ namespace StravaExample.Services
                         + "&external_id=myapp_" + appActivity.Id);
                     requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                     requestMessage.Content = multipartFormDataContent;
-                    HttpResponseMessage httpResponseMessage = await httpClient.SendAsync(requestMessage);
+                    HttpResponseMessage httpResponseMessage = await httpHandler.SendAsync(requestMessage);
 
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
-                        // Delete synced from database. Example:
-                        // await database.Delete(stravaSync);
+                        await database.Delete(stravaSync);
                     }
                     else
                     {
@@ -289,7 +298,7 @@ namespace StravaExample.Services
                 string accessToken = await GetAccessToken();
                 HttpRequestMessage requestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/v3/athlete/activities?after=" + stravaSyncDate);
                 requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                HttpResponseMessage httpResponseMessage = await httpClient.SendAsync(requestMessage);
+                HttpResponseMessage httpResponseMessage = await httpHandler.SendAsync(requestMessage);
 
                 if (!httpResponseMessage.IsSuccessStatusCode)
                 {
@@ -308,7 +317,7 @@ namespace StravaExample.Services
                     requestMessage = new HttpRequestMessage(HttpMethod.Get,
                         "/api/v3/activities/" + activity.id + "/streams?keys=time,heartrate&key_by_type=true");
                     requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                    httpResponseMessage = await httpClient.SendAsync(requestMessage);
+                    httpResponseMessage = await httpHandler.SendAsync(requestMessage);
 
                     if (!httpResponseMessage.IsSuccessStatusCode)
                     {
@@ -321,10 +330,8 @@ namespace StravaExample.Services
                 }
 
                 UpdateSyncDate();
-                SaveActivities(activitiesList);
-
+                await SaveActivities(activitiesList);
                 return true;
-
             }
             catch (Exception e)
             {
@@ -333,7 +340,7 @@ namespace StravaExample.Services
             }
         }
 
-        public void SaveActivities(List<StravaActivity> activitiesList)
+        public async Task SaveActivities(List<StravaActivity> activitiesList)
         {
             try
             {
@@ -342,9 +349,9 @@ namespace StravaExample.Services
                 foreach (StravaActivity activity in activitiesList)
                 {
                     appActivity = ConvertStravaActivityToAppActivity(activity);
-                    // Save appActivity to database
+                    await database.Insert(appActivity);
                     appActivityHRList = ConvertStravaActivityStreamToAppActivityHR(activity.activityStream, appActivity.Id);
-                    // Save appActivityHRList to database
+                    await database.InsertAll(appActivityHRList);
                 }
             }
             catch (Exception e)
@@ -426,28 +433,32 @@ namespace StravaExample.Services
 
         public long GetSyncDate()
         {
-            bool containsStravaSyncDate = propertiesService.Contains("stravaSyncDate");
+            bool containsStravaSyncDate = properties.Contains("stravaSyncDate");
             long stravaSyncDate;
             if (containsStravaSyncDate)
             {
-                stravaSyncDate = (long)propertiesService.Get("stravaSyncDate");
+                stravaSyncDate = (long)properties.Get("stravaSyncDate");
             }
             else
             {
                 stravaSyncDate = DateTimeUtil.ConvertDateTimeToEpoch(DateTime.Now.ToUniversalTime());
-                propertiesService.Save("stravaSyncDate", stravaSyncDate);
+                properties.Save("stravaSyncDate", stravaSyncDate);
             }
+            DateTime dateTime = DateTimeUtil.ConvertEpochToDateTime(stravaSyncDate).AddDays(-3);
+            stravaSyncDate = DateTimeUtil.ConvertDateTimeToEpoch(dateTime);
             return stravaSyncDate;
         }
 
         public long UpdateSyncDate()
         {
             long syncDate = DateTimeUtil.ConvertDateTimeToEpoch(DateTime.Now.ToUniversalTime());
-            propertiesService.Save("stravaSyncDate", syncDate);
+            properties.Save("stravaSyncDate", syncDate);
             return syncDate;
         }
 
         public static Task SyncTask;
+        public event EventHandler OnSyncCompleted;
+
         public void Sync()
         {
             if (IsConnected() && (SyncTask == null || SyncTask.IsCompleted))
@@ -457,13 +468,24 @@ namespace StravaExample.Services
                     bool downloadResult = await DownloadActivities();
                     bool uploadResult = await UploadActivities();
                     UpdateSyncDate();
-                    if (!downloadResult || !uploadResult)
+                    Device.BeginInvokeOnMainThread(() =>
                     {
-                        Console.WriteLine("Error syncing activities.");
-                    }
+                        OnSyncCompleted?.Invoke(this, new SyncCompletedEventArgs(downloadResult, uploadResult));
+                    });
                 });
             }
         }
 
+    }
+
+    public class SyncCompletedEventArgs : EventArgs
+    {
+        public bool DownloadResult { get; set; }
+        public bool UploadResult { get; set; }
+        public SyncCompletedEventArgs(bool downloadResult, bool uploadResult)
+        {
+            DownloadResult = downloadResult;
+            UploadResult = uploadResult;
+        }
     }
 }

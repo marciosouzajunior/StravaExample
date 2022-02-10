@@ -3,19 +3,24 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="StravaExample.MainPage">
 
-    <StackLayout>
+    <StackLayout Margin="20">
+        
         <Button x:Name="connectButton"
                 Text="Connect"
-                Clicked="Connect_Clicked"
-                HorizontalOptions="Center"/>
+                Clicked="Connect_Clicked" />
+        
         <Button x:Name="disconnectButton"
                 Text="Disconnect"
-                Clicked="Disconnect_Clicked"
-                HorizontalOptions="Center"/>
+                Clicked="Disconnect_Clicked"/>
+        
+        <Button x:Name="addActivityButton"
+                Text="Add Activity"
+                Clicked="AddActivity_Clicked"/>
+
         <Button x:Name="syncButton"
                 Text="Sync"
-                Clicked="Sync_Clicked"
-                HorizontalOptions="Center"/>        
+                Clicked="Sync_Clicked"/>
+
     </StackLayout>
 
 </ContentPage>
