@@ -444,8 +444,6 @@ namespace StravaExample.Services.Impl
                 stravaSyncDate = DateTimeUtil.ConvertDateTimeToEpoch(DateTime.Now.ToUniversalTime());
                 properties.Save("stravaSyncDate", stravaSyncDate);
             }
-            DateTime dateTime = DateTimeUtil.ConvertEpochToDateTime(stravaSyncDate).AddDays(-3);
-            stravaSyncDate = DateTimeUtil.ConvertDateTimeToEpoch(dateTime);
             return stravaSyncDate;
         }
 
