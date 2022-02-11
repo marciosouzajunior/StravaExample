@@ -13,7 +13,6 @@ namespace StravaExampleTest
     public class StravaServiceTest
     {
 
-        Mock<IDialog> dialogMock;
         Mock<IProperties> propertiesMock;
         Mock<IDatabase> databaseMock;
         Mock<IHttpHandler> httpHandlerMock;
@@ -28,7 +27,6 @@ namespace StravaExampleTest
         public void Setup()
         {
 
-            dialogMock = new Mock<IDialog>();
             propertiesMock = new Mock<IProperties>();
             databaseMock = new Mock<IDatabase>();
             httpHandlerMock = new Mock<IHttpHandler>();
@@ -47,7 +45,6 @@ namespace StravaExampleTest
                 + "\"access_token\":\"" + accessToken + "\"}";
 
             stravaService = new StravaService(
-                dialogMock.Object,
                 propertiesMock.Object,
                 databaseMock.Object,
                 httpHandlerMock.Object);
