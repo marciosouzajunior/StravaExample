@@ -8,11 +8,14 @@ namespace StravaExample.Services
 {
     public interface IStravaService
     {
+        event EventHandler Connected;
+        event EventHandler Disconnected;
+        event EventHandler ActivityAdded;
+        event EventHandler SyncCompleted;
         Task Connect();
         Task Disconnect();
         bool IsConnected();
         Task NewActivity(AppActivity appActivity);
         void Sync();
-        event EventHandler OnSyncCompleted;
     }
 }

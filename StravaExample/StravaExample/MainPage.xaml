@@ -3,24 +3,42 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="StravaExample.MainPage">
 
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <Style TargetType="Button">
+                <Setter Property="TextColor" Value="White"/>
+                <Setter Property="BackgroundColor" Value="#FC4C02" />
+                
+            </Style>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+    
     <StackLayout Margin="20">
-        
-        <Button x:Name="connectButton"
-                Text="Connect"
-                Clicked="Connect_Clicked" />
-        
-        <Button x:Name="disconnectButton"
-                Text="Disconnect"
-                Clicked="Disconnect_Clicked"/>
-        
-        <Button x:Name="addActivityButton"
-                Text="Add Activity"
-                Clicked="AddActivity_Clicked"/>
 
-        <Button x:Name="syncButton"
-                Text="Sync"
-                Clicked="Sync_Clicked"/>
+        <Image Source="{Binding StravaLogo}"
+               HeightRequest="100" />
 
+        <StackLayout VerticalOptions="CenterAndExpand"
+                     Spacing="15">
+            
+            <Button x:Name="connectButton"
+                    Text="Connect"
+                    Clicked="Connect_Clicked" />
+        
+            <Button x:Name="disconnectButton"
+                    Text="Disconnect"
+                    Clicked="Disconnect_Clicked"/>
+        
+            <Button x:Name="addActivityButton"
+                    Text="Add Activity"
+                    Clicked="AddActivity_Clicked"/>
+
+            <Button x:Name="syncButton"
+                    Text="Sync"
+                    Clicked="Sync_Clicked"/>
+            
+        </StackLayout>
+        
     </StackLayout>
 
 </ContentPage>

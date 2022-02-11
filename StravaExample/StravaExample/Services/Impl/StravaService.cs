@@ -16,10 +16,15 @@ namespace StravaExample.Services.Impl
 {
     public class StravaService : IStravaService
     {
-        private IDialog dialog;
         private IProperties properties;
         private IDatabase database;
         private IHttpHandler httpHandler;
+
+        public event EventHandler Connected;
+        public event EventHandler Disconnected;
+        public event EventHandler ActivityAdded;
+        public event EventHandler SyncCompleted;
+        public static Task SyncTask;
 
         private string clientId = "ReplaceWithClientID";
         private string clientSecret = "ReplaceWithClientSecret";
@@ -28,16 +33,14 @@ namespace StravaExample.Services.Impl
 
         public StravaService()
         {
-            dialog = DependencyService.Get<IDialog>();
             properties = DependencyService.Get<IProperties>();
             database = DependencyService.Get<IDatabase>();
             httpHandler = DependencyService.Get<IHttpHandler>();
             httpHandler.BaseAddress = new Uri("https://www.strava.com");
         }
 
-        public StravaService(IDialog dialog, IProperties properties, IDatabase database, IHttpHandler httpHandler)
+        public StravaService(IProperties properties, IDatabase database, IHttpHandler httpHandler)
         {
-            this.dialog = dialog;
             this.properties = properties;
             this.database = database;
             this.httpHandler = httpHandler;
@@ -88,13 +91,9 @@ namespace StravaExample.Services.Impl
                 {
                     string tokenResponse = await httpResponseMessage.Content.ReadAsStringAsync();
                     StravaTokenResponse stravaTokenResponse = JsonConvert.DeserializeObject<StravaTokenResponse>(tokenResponse);
-                    properties.Save("stravaToken", JsonConvert.SerializeObject(stravaTokenResponse));
-                    await dialog.DisplayAlert("Connect", "Connected to Strava.", "OK");
+                    properties.Save("stravaToken", JsonConvert.SerializeObject(stravaTokenResponse));                    
                 }
-                else
-                {
-                    await dialog.DisplayAlert("Connect", "Fail to connect.", "OK");
-                }
+                Connected?.Invoke(this, new AccountEventArgs(httpResponseMessage.IsSuccessStatusCode));
 
             }
             catch (Exception e)
@@ -123,17 +122,9 @@ namespace StravaExample.Services.Impl
                 string accessToken = await GetAccessToken();
                 HttpResponseMessage httpResponseMessage =
                     await httpHandler.PostAsync("/api/v3/oauth/deauthorize?access_token=" + accessToken, null);
-
-                if (httpResponseMessage.IsSuccessStatusCode)
-                {
-                    await dialog.DisplayAlert("Disconnect", "Disconnected from Strava.", "OK");
-                }
-                else
-                {
-                    await dialog.DisplayAlert("Disconnect", "Fail to disconnect from Strava.", "OK");
-                }
                 properties.Remove("stravaToken");
                 properties.Remove("stravaSyncDate");
+                Disconnected?.Invoke(this, new AccountEventArgs(httpResponseMessage.IsSuccessStatusCode));
             }
             catch (Exception e)
             {
@@ -223,15 +214,15 @@ namespace StravaExample.Services.Impl
                     AppActivityId = appActivity.Id
                 };
                 await database.Insert(stravaSync);
-                await dialog.DisplayAlert("NewActivity", "Activity inserted and ready to sync.", "OK");
+                ActivityAdded?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception e)
             {
-                await dialog.DisplayAlert("NewActivity", "Error adding activity: " + e.Message, "OK");
+                Console.WriteLine("Error adding activity: " + e.Message);
             }
         }
 
-        public async Task<bool> UploadActivities()
+        public async Task<Tuple<bool, int>> UploadActivities()
         {
 
             StreamContent gpxStreamContent = null;
@@ -269,18 +260,17 @@ namespace StravaExample.Services.Impl
                     }
                     else
                     {
-                        return false;
+                        return Tuple.Create(false, 0);
                     }
 
                 }
-
-                return true;
+                return Tuple.Create(true, stravaSyncList.Count);
 
             }
             catch (Exception e)
             {
                 Console.WriteLine("Error uploading activities: " + e.Message);
-                return false;
+                return Tuple.Create(false, 0);
             }
             finally
             {
@@ -289,7 +279,7 @@ namespace StravaExample.Services.Impl
             }
         }
 
-        public async Task<bool> DownloadActivities()
+        public async Task<Tuple<bool, int>> DownloadActivities()
         {
             try
             {
@@ -302,7 +292,7 @@ namespace StravaExample.Services.Impl
 
                 if (!httpResponseMessage.IsSuccessStatusCode)
                 {
-                    return false;
+                    return Tuple.Create(false, 0);
                 }
 
                 // Get activity stream
@@ -321,7 +311,7 @@ namespace StravaExample.Services.Impl
 
                     if (!httpResponseMessage.IsSuccessStatusCode)
                     {
-                        return false;
+                        return Tuple.Create(false, 0);
                     }
 
                     streamResponse = await httpResponseMessage.Content.ReadAsStringAsync();
@@ -331,12 +321,12 @@ namespace StravaExample.Services.Impl
 
                 UpdateSyncDate();
                 await SaveActivities(activitiesList);
-                return true;
+                return Tuple.Create(true, activitiesList.Count);
             }
             catch (Exception e)
             {
                 Console.WriteLine("Error downloading activities: " + e.Message);
-                return false;
+                return Tuple.Create(false, 0);
             }
         }
 
@@ -454,21 +444,25 @@ namespace StravaExample.Services.Impl
             return syncDate;
         }
 
-        public static Task SyncTask;
-        public event EventHandler OnSyncCompleted;
-
         public void Sync()
         {
             if (IsConnected() && (SyncTask == null || SyncTask.IsCompleted))
             {
                 SyncTask = Task.Run(async () =>
                 {
-                    bool downloadResult = await DownloadActivities();
-                    bool uploadResult = await UploadActivities();
+                    Tuple<bool, int> downloadResult = await DownloadActivities();
+                    Tuple<bool, int> uploadResult = await UploadActivities();
                     UpdateSyncDate();
+
                     Device.BeginInvokeOnMainThread(() =>
                     {
-                        OnSyncCompleted?.Invoke(this, new SyncCompletedEventArgs(downloadResult, uploadResult));
+                        SyncEventArgs syncEventArgs = new SyncEventArgs
+                        {
+                            DownloadCount = downloadResult.Item2,
+                            UploadCount = uploadResult.Item2,
+                            IsSuccessResult = downloadResult.Item1 && uploadResult.Item1
+                        };
+                        SyncCompleted?.Invoke(this, syncEventArgs);
                     });
                 });
             }
@@ -476,14 +470,22 @@ namespace StravaExample.Services.Impl
 
     }
 
-    public class SyncCompletedEventArgs : EventArgs
+    public class AccountEventArgs : EventArgs
     {
-        public bool DownloadResult { get; set; }
-        public bool UploadResult { get; set; }
-        public SyncCompletedEventArgs(bool downloadResult, bool uploadResult)
+        private bool IsSuccessResult;
+        public AccountEventArgs(bool isSuccessResult)
         {
-            DownloadResult = downloadResult;
-            UploadResult = uploadResult;
+            IsSuccessResult = isSuccessResult;
+        }
+    }
+
+    public class SyncEventArgs : EventArgs
+    {
+        public int DownloadCount { get; set; }
+        public int UploadCount { get; set; }
+        public bool IsSuccessResult { get; set; }
+        public SyncEventArgs()
+        {
         }
     }
 }

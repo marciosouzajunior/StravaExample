@@ -14,12 +14,16 @@ namespace StravaExample
     public partial class MainPage : ContentPage
     {
 
+        public ImageSource StravaLogo { get; set; }
         IStravaService stravaService;
+        IDialog dialog;
 
         public MainPage()
         {
             InitializeComponent();
+            StravaLogo = ImageSource.FromResource("StravaExample.strava_logo.jpg");
             stravaService = DependencyService.Get<IStravaService>();
+            dialog = DependencyService.Get<IDialog>();
             BindingContext = this;
         }
 
@@ -27,12 +31,19 @@ namespace StravaExample
         {
             base.OnAppearing();
             CheckConnected();
-            stravaService.OnSyncCompleted += OnStravaSyncCompleted;
+
+            stravaService.Connected += OnConnected;
+            stravaService.Disconnected += OnDisconnected;
+            stravaService.ActivityAdded += OnActivityAdded;
+            stravaService.SyncCompleted += OnSyncCompleted;
         }
 
         protected override void OnDisappearing()
         {
-            stravaService.OnSyncCompleted -= OnStravaSyncCompleted;
+            stravaService.Connected -= OnConnected;
+            stravaService.Disconnected -= OnDisconnected;
+            stravaService.ActivityAdded -= OnActivityAdded;
+            stravaService.SyncCompleted -= OnSyncCompleted;
         }
 
         private async void Connect_Clicked(object sender, EventArgs e)
@@ -76,14 +87,31 @@ namespace StravaExample
             stravaService.Sync();     
         }
 
-        private async void OnStravaSyncCompleted(object sender, EventArgs e)
+        private async void OnConnected(object sender, EventArgs e)
         {
-            IDialog dialog = DependencyService.Get<IDialog>();
-            SyncCompletedEventArgs syncCompletedEventArgs = e as SyncCompletedEventArgs;
+            await dialog.DisplayAlert("Connect", "Connected to Strava.", "OK");
+        }
 
-            if (syncCompletedEventArgs.DownloadResult && syncCompletedEventArgs.UploadResult)
+        private async void OnDisconnected(object sender, EventArgs e)
+        {
+            await dialog.DisplayAlert("Disconnect", "Disconnected from Strava.", "OK");
+        }
+
+        private async void OnActivityAdded(object sender, EventArgs e)
+        {
+            await dialog.DisplayAlert("NewActivity", "Activity inserted and ready to sync.", "OK");
+        }
+
+        private async void OnSyncCompleted(object sender, EventArgs e)
+        {
+            SyncEventArgs syncEventArgs = e as SyncEventArgs;
+
+            if (syncEventArgs.IsSuccessResult)
             {
-                await dialog.DisplayAlert("Sync", "Sync completed successfully.", "OK");
+                await dialog.DisplayAlert("Sync", "Sync completed successfully." +
+                    "\nDownloads: " + syncEventArgs.DownloadCount +
+                    "\nUploads: " + syncEventArgs.UploadCount, 
+                    "OK");
             }
             else
             {
