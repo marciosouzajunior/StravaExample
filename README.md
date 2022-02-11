@@ -1,6 +1,8 @@
 # StravaExample
 Example for authenticate, download and upload activities between Strava and Xamarin.Forms app.
 
+<img src="https://github.com/marciosouzajunior/StravaExample/blob/master/StravaExample/StravaExample/screenshot.png" width="250">
+
 ## Project structure
 - **Models**: Classes that represent Strava and app entities.
 - **Services**:
